@@ -3,6 +3,18 @@ from random import randrange
 import gspread as gs
 from Google import *
 import pandas as pd
+import datetime
+import string
+import random
+
+
+# Block id generator
+
+def block_id_generator(size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+
+
 
 # Convierte un df a una hoja de calculo de google sheet
 
@@ -110,12 +122,22 @@ def block_allocator():
     df_config = gsheet_to_df(sheet_id, "Block configuration")
 
     size = int(df_config.iloc[0]["blockSize"])
+    owner = df_config.iloc[0]["owner"]
 
-    # Seleccion de N rows de forma aleatoria para ser asignadas
+    # Seleccion de N rows de forma aleatoria para ser asignadas teniendo en cuenta los cif ya asigandos.
 
-    allocation_df = pd.concat([ df_random(df_bbdd, size), df_pools]).drop_duplicates(subset="cif", keep="first")
-    
-    # print(allocation_df[["cif"]])
+    try:
+        cifs_already_allocated = list(df_pools["cif"])
+    except: 
+        cifs_already_allocated = []
+        
+    df_bbdd_available = df_bbdd.loc[~df_bbdd['cif'].isin(cifs_already_allocated)]
+
+
+    allocation_df = df_random(df_bbdd_available, size)
+
+
+    print(allocation_df)
 
     # Asignación de columnas que van a aparecer en el bloque
 
@@ -202,12 +224,41 @@ def block_allocator():
             "actionType"])
 
     # Asignación de columnas que van a aparecer en pools    
+    now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    blockId = str(block_id_generator())
+    pools_df = pd.DataFrame()
+    
+    pools_df["cif"] = cif
 
-    # pools_df = allocation_df[["cif" ]]
+    pools_df["allocatedTo"] = owner
+    pools_df["allocationDate"] = now
+    pools_df["blockId"] = blockId
+
+    pools_df["name"] = name
+    pools_df["niche"] = niche
+    pools_df["contactName"] = contactName
+    pools_df["charge"] = charge
+    pools_df["linkedin"] = linkedin
+    pools_df["email"] = email
+    pools_df["phone"] = phone
+    pools_df["web"] = web
+    pools_df["fullAddress"] = fullAddress
 
     # Escritura en pools
 
-    # df_to_gsheet("12B1RyjGdWob34ZZ0jYy6h6mEfuQba1GS7A8Mwxx5pdY", "allocationPool", pools_df, columns=["cif"])
+    df_to_gsheet("12B1RyjGdWob34ZZ0jYy6h6mEfuQba1GS7A8Mwxx5pdY", "allocationPool", pools_df, columns=["allocatedTo","allocationDate",
+            "blockId",
+            "cif",
+            "name",
+            "niche",
+            "contactName",
+            "charge",
+            "linkedin",
+            "email",
+            "phone",
+            "web",
+            "fullAddress"
+            ])
 
     
     # Borrado de la petición y registro de actividad en los logs del contenedor
