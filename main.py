@@ -1,17 +1,20 @@
 from flask import Flask
 from functions import *
+import datetime
 import os
 
 
 app = Flask(__name__)
 
 
-@app.route("/")
+@app.route("/block_allocator")
 def main():
+
+    now = datetime.datetime.now().strftime("%d-%m-%Y at %H:%M:%S")
 
     block_allocator()
 
-    return "Block allocator is ready for requests..."
+    return f"Block allocator succesfully executed on {now}"
 
 
 if __name__ == "__main__":

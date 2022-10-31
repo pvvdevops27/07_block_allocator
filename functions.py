@@ -8,6 +8,60 @@ import string
 import random
 
 
+
+# Devuelve el id de los emails que contienen un asunto específico.
+def get_email_id(message_subject):
+    CLIENT_SECRET_FILE = './client_secret.json'
+    API_NAME = 'gmail'
+    API_VERSION = 'v1'
+    SCOPES = ['https://mail.google.com/']
+
+    service = Create_Service(
+        CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    # Call the Gmail API to fetch INBOX
+    results = service.users().messages().list(
+        userId='me', labelIds=['INBOX'], maxResults=5).execute()
+
+    messages = results.get('messages', [])
+
+    for message in messages:
+        messageResource = service.users().messages().get(
+            userId="me", id=message['id']).execute()
+        headers = messageResource["payload"]["headers"]
+
+        subject = [j['value']
+                    for j in headers if j["name"] == "Subject"]
+
+        if subject[0] == message_subject:
+            return message["id"]
+
+# Elimina un mensaje de gmail
+def delete_message(message_id):
+    CLIENT_SECRET_FILE = "./client_secret.json"
+    API_NAME = 'gmail'
+    API_VERSION = 'v1'
+    SCOPES = ['https://mail.google.com/']
+
+    service = Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+
+    service.users().messages().delete(userId='me', id=message_id).execute()
+    return 'Message with id: %s deleted' % message_id
+
+# Elimina la petición realizada
+def delete_request(message_subject):
+    try:
+        delete_message(get_email_id(message_subject))
+        return "success"
+    except:
+        return "No requests founded"
+
+
+# Registra la actividad realizada por Aitana
+def logger(tool="Block allocator"):
+    timestamp =datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    with open('logs.txt', 'a') as the_file:
+        the_file.write(f'{timestamp} | {tool} was activated\n')      
+
 # Block id generator
 
 def block_id_generator(size=6, chars=string.ascii_uppercase + string.digits):
@@ -17,7 +71,6 @@ def block_id_generator(size=6, chars=string.ascii_uppercase + string.digits):
 
 
 # Convierte un df a una hoja de calculo de google sheet
-
 def df_to_gsheet(sheet_id, sheet_name, df, columns):
     try: 
 
@@ -136,8 +189,6 @@ def block_allocator():
 
     allocation_df = df_random(df_bbdd_available, size)
 
-
-    print(allocation_df)
 
     # Asignación de columnas que van a aparecer en el bloque
 
@@ -263,4 +314,6 @@ def block_allocator():
     
     # Borrado de la petición y registro de actividad en los logs del contenedor
 
-block_allocator()
+    delete_request("Block Allocator")
+
+    logger()
