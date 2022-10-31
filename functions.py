@@ -311,9 +311,26 @@ def block_allocator():
             "fullAddress"
             ])
 
+
+    # Añado metadata en Block information sheet
     
+    startingDate = datetime.datetime.now().strftime("%d/%m/%Y")
+
+    block_information_df = pd.DataFrame( columns =["blockId", "startingDate", "deadLine"])
+
+    block_information_df = block_information_df.append({"blockId": f"{blockId}", "startingDate": f"{startingDate}", 
+    "deadLine": ""}, ignore_index = True)
+
+    print(block_information_df)
+
+    df_to_gsheet(sheet_id, "Block information", block_information_df, columns=["blockId","startingDate", "deadLine"])
+
+
     # Borrado de la petición y registro de actividad en los logs del contenedor
 
-    delete_request("Block Allocator")
+    # delete_request("Block Allocator")
 
     logger()
+
+
+block_allocator()
