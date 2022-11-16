@@ -1,336 +1,49 @@
-import gspread_dataframe as gd
-from random import randrange
-import gspread as gs
-from Google import *
-import pandas as pd
+from functions_library import *
 import datetime
-import string
-import random
+
+# Envio de email masivos de un dataframe
 
 
+def massive_email_sender(id, sheet_name):
 
-# Devuelve el id de los emails que contienen un asunto específico.
-def get_email_id(message_subject):
-    CLIENT_SECRET_FILE = './client_secret.json'
-    API_NAME = 'gmail'
-    API_VERSION = 'v1'
-    SCOPES = ['https://mail.google.com/']
+    df = gsheet_to_df(id, sheet_name)
 
-    service = Create_Service(
-        CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
-    # Call the Gmail API to fetch INBOX
-    results = service.users().messages().list(
-        userId='me', labelIds=['INBOX'], maxResults=5).execute()
+    print(df)
+    # Massive email send
 
-    messages = results.get('messages', [])
+    config_df = gsheet_to_df(id, "Config")
 
-    for message in messages:
-        messageResource = service.users().messages().get(
-            userId="me", id=message['id']).execute()
-        headers = messageResource["payload"]["headers"]
+    message = list(config_df["message"])[0]
 
-        subject = [j['value']
-                    for j in headers if j["name"] == "Subject"]
+    subject = list(config_df["subject"])[0]
 
-        if subject[0] == message_subject:
-            return message["id"]
+    cc = list(config_df["cc"])[0]
+    timestamp = []
+    for index, row in df.iterrows():
+        email = row["email"]+","+cc
 
-# Elimina un mensaje de gmail
-def delete_message(message_id):
-    CLIENT_SECRET_FILE = "./client_secret.json"
-    API_NAME = 'gmail'
-    API_VERSION = 'v1'
-    SCOPES = ['https://mail.google.com/']
+        signature = '<br>--<br><div dir="ltr"><b><span style="font-size:12.0pt;color:#002451" lang="ES"></span></b><img src="https://ci3.googleusercontent.com/mail-sig/AIorK4xfn53eCYBGGyGiEE0qw8RXKkwJq1lb0Jb78GWtswbSEMSrJX1RTi3umf-9PFJeLdvtjn0Z4Ho" alt="logo_twig"><br><p class="MsoNormal"><b><span style="font-size:12.0pt;color:#002451" lang="ES">Pablo Viteri</span></b></p><p class="MsoNormal"><b><span style="font-size:12.0pt;color:#002451" lang="ES">Director general</span></b><span style="font-size:12.0pt;color:black" lang="ES"></span></p><p class="MsoNormal"><span style="color:#002451" lang="ES"><u></u>&nbsp;<u></u></span></p><p class="MsoNormal"><span style="font-size:12.0pt;color:#002451" lang="ES">&nbsp;<b>D</b>: Paseo de la Castellana 91, 4 planta</span><span lang="ES"><u></u><u></u></span></p><p class="MsoNormal"><span style="font-size:12.0pt;color:#002451" lang="ES">&nbsp;<b>T</b>: +34 911 847 830</span><span lang="ES"></span></p><p class="MsoNormal"></p><p class="MsoNormal"><span style="font-size:12.0pt;color:#002451" lang="ES">&nbsp;<b>E</b>: <a href="mailto:pablo.viteri@twigspain.com" target="_blank"><span style="color:#0563c1">pablo.viteri@twigspain.com</span></a></span><span style="font-size:11.5pt;color:#201f1e" lang="ES"><u></u><u></u></span></p><p class="MsoNormal"><span style="font-size:12.0pt;color:#002451" lang="ES">&nbsp;<b>W</b>:&nbsp;<a href="http://twigspain.com" target="_blank">twigspain.com</a></span><span style="font-size:12.0pt;color:black" lang="ES"><u></u><u></u></span></p><span style="font-size:12.0pt;color:#002451" lang="ES">&nbsp;<b>L</b>: &nbsp;<a href="https://www.linkedin.com/in/pablo-v-39901a1a3/" target="_blank"><span style="color:#0563c1">LinkedIn</span></a></span></div>'
+        gmail_sender(subject, message+signature, email)
+        timestamp.append(
+            datetime.datetime.now().strftime("%d/%m/%Y, %H:%M:%S"))
 
-    service = Create_Service(CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
+    # Writing output
+    df_output = pd.DataFrame(columns=["email", "status"])
+    df_output["email"] = list(df["email"])
+    df_output["status"] = "success"
 
-    service.users().messages().delete(userId='me', id=message_id).execute()
-    return 'Message with id: %s deleted' % message_id
+    output_gsheet_writer(id, df_output)
 
-# Elimina la petición realizada
-def delete_request(message_subject):
-    try:
-        delete_message(get_email_id(message_subject))
-        return "success"
-    except:
-        return "No requests founded"
+    # Writing logs drive
+    df_logs = pd.DataFrame(columns=["email", "dateSent"])
+    df_logs["email"] = list(df["email"])
+    df_logs["dateSent"] = timestamp
+
+    logs_gsheet_writer(id, df_logs)
+
+    # Internal log
+
+    logger("Massive Email Sender")
 
 
-# Registra la actividad realizada por Aitana
-def logger(tool="Block allocator"):
-    timestamp =datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    with open('logs.txt', 'a') as the_file:
-        the_file.write(f'{timestamp} | {tool} was activated\n')      
-
-# Block id generator
-
-def block_id_generator(size=6, chars=string.ascii_uppercase + string.digits):
-    return ''.join(random.choice(chars) for _ in range(size))
-
-
-
-
-# Convierte un df a una hoja de calculo de google sheet
-def df_to_gsheet(sheet_id, sheet_name, df, columns):
-    try: 
-
-        gc = gs.service_account(filename='service_account.json')
-        sh = gc.open_by_url(
-            f'https://docs.google.com/spreadsheets/d/{sheet_id}')
-
-        ws = sh.worksheet(f'{sheet_name}')
-        existing_df = gd.get_as_dataframe(ws)[columns].dropna(how='all')
-
-        data = [existing_df, df]
-        updated_df = pd.concat(data, axis=0)
-
-        gd.set_with_dataframe(ws, updated_df)
-
-        return "Success"
-
-    except:
-        return "Error"
-
-# Devuelve el sheetId de la petición que contienen un asunto específico si procede
-
-def get_sheet_id(message_subject):
-    CLIENT_SECRET_FILE = './client_secret.json'
-    API_NAME = 'gmail'
-    API_VERSION = 'v1'
-    SCOPES = ['https://mail.google.com/']
-
-    service = Create_Service(
-        CLIENT_SECRET_FILE, API_NAME, API_VERSION, SCOPES)
-    # Call the Gmail API to fetch INBOX
-    results = service.users().messages().list(
-        userId='me', labelIds=['INBOX'], maxResults=5).execute()
-
-    messages = results.get('messages', [])
-
-    for message in messages:
-        messageResource = service.users().messages().get(
-            userId="me", id=message['id']).execute()
-        headers = messageResource["payload"]["headers"]
-
-        subject = [j['value']
-                    for j in headers if j["name"] == "Subject"]
-
-        if subject[0] == message_subject:
-
-            if len(str(messageResource["snippet"]).strip()) > 1:
-
-                return str(messageResource["snippet"]).strip().split(" ")[0]
-
-            else:
-                return str(messageResource["snippet"]).strip()
-
-        else:
-            return "Not found"
-
-# Selecciona N filas aleatoriamente de un df
-
-def df_random(df, size):
-    random_numbers = []
-    for number in range(1, len(df)):
-        rand_number = randrange(1, size+1)
-        if rand_number not in random_numbers:
-            random_numbers.append(rand_number)
-
-    random_numbers = random_numbers[0:size+1]
-
-    header = list(df.iloc[0])
-    df.iloc[random_numbers].columns = header
-
-    return df.iloc[random_numbers]
-
-# Convierte una hoja de calculo de google sheet a un df
-
-def gsheet_to_df(id, sheet_name):
-    gc = gs.service_account(filename='service_account.json')
-    sh = gc.open_by_url(
-        f'https://docs.google.com/spreadsheets/d/{id}')
-
-    ws = sh.worksheet(f'{sheet_name}')
-    df = pd.DataFrame(ws.get_all_records())
-    return df
-
-
-def block_allocator():
-    # Conexión con bbdd en google sheets y lectura mediante pandas
-
-    df_bbdd = gsheet_to_df("1C-hTyVGZI1xqQHvRqRsEGDuJoSlSj63h1PzDz3fwSFE", "ddbb")
-
-    # Conexión con pools en google sheets
-
-    df_pools = gsheet_to_df("12B1RyjGdWob34ZZ0jYy6h6mEfuQba1GS7A8Mwxx5pdY", "allocationPool")
-
-    # Asignación del bloque al miembro de Aitana
-
-    # Lectura del id de la hoja de calculo a través de la petición por correo
-
-    sheet_id = get_sheet_id("Block Allocator")
-
-    # Obtiene los parámetros de configuración necesarios para la asignación del bloque
-
-    df_config = gsheet_to_df(sheet_id, "Block configuration")
-
-    size = int(df_config.iloc[0]["blockSize"])
-    owner = df_config.iloc[0]["owner"]
-
-    # Seleccion de N rows de forma aleatoria para ser asignadas teniendo en cuenta los cif ya asigandos.
-
-    try:
-        cifs_already_allocated = list(df_pools["cif"])
-    except: 
-        cifs_already_allocated = []
-        
-    df_bbdd_available = df_bbdd.loc[~df_bbdd['cif'].isin(cifs_already_allocated)]
-
-
-    allocation_df = df_random(df_bbdd_available, size)
-
-
-    # Asignación de columnas que van a aparecer en el bloque
-
-    # Columnas:
     
-    current_block_df = pd.DataFrame()
-    
-    # Company information
-    
-    cif = allocation_df[["cif"]]
-    name = allocation_df[["name"]]
-    niche = ""
-    charge = allocation_df[["charge"]]
-    contactName = allocation_df[["contactName"]]
-
-    # Contact information
-    web = allocation_df[["web"]]
-    linkedin = allocation_df[["linkedin"]]
-    email = allocation_df[["email"]]
-    fullAddress = ""
-    phone = allocation_df[["phone"]]
-
-    # Connections done
-    connectionLinkedinDate = ""
-    connectionEmailDate	= ""
-    connectionPhoneDate = ""
-    connectionAddressDate = ""
-    
-    # Responses
-    responseLinkedinDate = ""
-    responseEmailDate = ""
-    responsePhoneDate = ""
-    responseAddressDate = ""
-    
-    # Conclusion
-    actionType = ""
-
-
-    # Construccion del dataframe de asignación 
-
-    current_block_df["cif"] = cif
-    current_block_df["name"] = name
-    current_block_df["niche"] = niche
-    current_block_df["charge"] = charge
-    current_block_df["contactName"] = contactName
-    current_block_df["web"] = web
-    current_block_df["linkedin"] = linkedin
-    current_block_df["email"] = email
-    current_block_df["fullAddress"] = fullAddress
-    current_block_df["phone"] = phone
-
-
-    current_block_df["connectionLinkedinDate"] = connectionLinkedinDate
-    current_block_df["connectionEmailDate"] = connectionEmailDate
-    current_block_df["connectionPhoneDate"] = connectionPhoneDate
-    current_block_df["connectionAddressDate"] = connectionAddressDate
-    
-    current_block_df["responseLinkedinDate"] = responseLinkedinDate
-    current_block_df["responseEmailDate"] = responseEmailDate
-    current_block_df["responsePhoneDate"] = responsePhoneDate
-    current_block_df["responseAddressDate"] = responseAddressDate
-
-    current_block_df["actionType"] = actionType
-
-    # Escritura en el fichero current correspondiente al miembro de Aitana
-
-    df_to_gsheet(sheet_id, "Block in progress", current_block_df, columns=["cif","name",
-            "niche",
-            "charge",
-            "contactName",
-            "web",
-            "linkedin",
-            "email",
-            "fullAddress",
-            "phone",
-            "connectionLinkedinDate",
-            "connectionEmailDate",
-            "connectionPhoneDate",
-            "connectionAddressDate",
-            "responseLinkedinDate",
-            "responseEmailDate",
-            "responsePhoneDate",
-            "responseAddressDate",
-            "actionType"])
-
-    # Asignación de columnas que van a aparecer en pools    
-    now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    blockId = str(block_id_generator())
-    pools_df = pd.DataFrame()
-    
-    pools_df["cif"] = cif
-
-    pools_df["allocatedTo"] = owner
-    pools_df["allocationDate"] = now
-    pools_df["blockId"] = blockId
-
-    pools_df["name"] = name
-    pools_df["niche"] = niche
-    pools_df["contactName"] = contactName
-    pools_df["charge"] = charge
-    pools_df["linkedin"] = linkedin
-    pools_df["email"] = email
-    pools_df["phone"] = phone
-    pools_df["web"] = web
-    pools_df["fullAddress"] = fullAddress
-
-    # Escritura en pools
-
-    df_to_gsheet("12B1RyjGdWob34ZZ0jYy6h6mEfuQba1GS7A8Mwxx5pdY", "allocationPool", pools_df, columns=["allocatedTo","allocationDate",
-            "blockId",
-            "cif",
-            "name",
-            "niche",
-            "contactName",
-            "charge",
-            "linkedin",
-            "email",
-            "phone",
-            "web",
-            "fullAddress"
-            ])
-
-
-    # Añado metadata en Block information sheet
-    
-    startingDate = datetime.datetime.now().strftime("%d/%m/%Y")
-
-    block_information_df = pd.DataFrame( columns =["blockId", "startingDate", "deadLine"])
-
-    block_information_df = block_information_df.append({"blockId": f"{blockId}", "startingDate": f"{startingDate}", 
-    "deadLine": ""}, ignore_index = True)
-
-    print(block_information_df)
-
-    df_to_gsheet(sheet_id, "Block information", block_information_df, columns=["blockId","startingDate", "deadLine"])
-
-
-    # Borrado de la petición y registro de actividad en los logs del contenedor
-
-    # delete_request("Block Allocator")
-
-    logger()
-
-
-block_allocator()

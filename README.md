@@ -1,47 +1,9 @@
-# Data model
+# 03 Massive email sender
 
-## DDBB
+Permite enviar correos electrónicos de forma masiva y guarda el registro de los status y el timestamp en google drive
 
-### source
+## Uso
 
-### cif
+Desde main.py:
 
-### name
-
-Only uppercase allowed
-
-### niche
-
-Only niches that belong to approved niches
-
-### province
-
-Only uppercase allowed
-
-### uploadDate
-
-Date row was upload
-
-DD/MM/YYYY format
-
-### contactName
-
-Only uppercase allowed
-
-### charge 
-
-String
-
-
-
-
-## Pools
-
-### allocationPool
-
-- Asignación
-- Datos de la empresa
-- Contacto
-- Conexión
-- Respuesta
-- Conclusión
+- Input: id, sheet_name
